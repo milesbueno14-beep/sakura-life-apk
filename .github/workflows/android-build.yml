@@ -1,5 +1,5 @@
 
-name: Criar APK Sakura Life
+name: Gerar APK Sakura Life
 
 on:
   workflow_dispatch:
@@ -18,34 +18,42 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Preparar Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: Preparar Node
+        uses: actions/setup-node@v4
         with:
-          gradle-version: '8.7'
+          node-version: '20'
 
-      - name: Encontrar projeto
+      - name: Extrair aplicativo
         run: |
-          ZIP_FILE=$(find . -type f -iname '*.zip' -print -quit)
+          ZIP_FILE=$(find . -maxdepth 1 -type f -iname 'Sakura-Life-Android-pronto.zip' -print -quit)
           if [ -z "$ZIP_FILE" ]; then
-            echo "Nenhum ZIP encontrado"
-            exit 1
+            ZIP_FILE=$(find . -maxdepth 1 -type f -iname '*.zip' -print -quit)
           fi
-          mkdir projeto
-          unzip -q "$ZIP_FILE" -d projeto
-          SETTINGS=$(find projeto -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit)
-          if [ -z "$SETTINGS" ]; then
-            echo "settings.gradle não encontrado"
-            exit 1
+          mkdir extracted
+          unzip -q "$ZIP_FILE" -d extracted
+          HTML_FILE=$(find extracted -type f -iname 'index.html' -print -quit)
+          if [ -z "$HTML_FILE" ]; then
+            HTML_FILE=$(find extracted -type f -iname '*.html' -print -quit)
           fi
-          echo "PROJECT_DIR=$(dirname "$SETTINGS")" >> "$GITHUB_ENV"
+          mkdir www
+          cp "$HTML_FILE" www/index.html
 
-      - name: Compilar APK
-        run: gradle -p "$PROJECT_DIR" assembleDebug
+      - name: Criar aplicativo Android
+        run: |
+          npm init -y
+          npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
+          echo '{"appId":"com.sakuralife.app","appName":"Sakura Life","webDir":"www"}' > capacitor.config.json
+          npx cap add android
+          npx cap sync android
+
+      - name: Gerar APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
       - name: Disponibilizar APK
         uses: actions/upload-artifact@v4
         with:
           name: Sakura-Life-APK
-          path: projeto/**/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-          
+          path: android/app/build/outputs/apk/debug/app-debug.apk
